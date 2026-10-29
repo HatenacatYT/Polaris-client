@@ -1,49 +1,48 @@
 
 name: Polaris Windows Build
 
-on:
+'on':
   push:
-      branches:
-            - main
-              pull_request:
-                  branches:
-                        - main
-                          workflow_dispatch:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
 
-                          permissions:
-                            contents: read
+permissions:
+  contents: read
 
-                            jobs:
-                              build:
-                                  runs-on: windows-latest
+jobs:
+  build:
+    runs-on: windows-latest
 
-                                      steps:
-                                            - name: Checkout repository
-                                                    uses: actions/checkout@v4
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-                                                          - name: Set up Python 3.11
-                                                                  uses: actions/setup-python@v5
-                                                                          with:
-                                                                                    python-version: "3.11"
-                                                                                              cache: pip
-                                                                                                        cache-dependency-path: requirements-dev.txt
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
-                                                                                                              - name: Install dependencies
-                                                                                                                      run: |
-                                                                                                                                python -m pip install --upgrade pip
-                                                                                                                                          python -m pip install -r requirements-dev.txt
-                                                                                                                                                    python -m pip install pyinstaller
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+          python -m pip install pyinstaller
 
-                                                                                                                                                          - name: Run tests
-                                                                                                                                                                  run: python -m pytest -q
+      - name: Run tests
+        run: python -m pytest -q
 
-                                                                                                                                                                        - name: Build Polaris EXE
-                                                                                                                                                                                run: python -m PyInstaller --noconfirm --clean Polaris.spec
+      - name: Build Polaris EXE
+        run: python -m PyInstaller --noconfirm --clean Polaris.spec
 
-                                                                                                                                                                                      - name: Upload Polaris.exe
-                                                                                                                                                                                              uses: actions/upload-artifact@v4
-                                                                                                                                                                                                      with:
-                                                                                                                                                                                                                name: Polaris-Windows
-                                                                                                                                                                                                                          path: dist/Polaris.exe
-                                                                                                                                                                                                                                    if-no-files-found: error
-                                                                                                                                                                                                                                              retention-days: 14
+      - name: Upload Polaris EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: Polaris-Windows
+          path: dist/Polaris.exe
+          if-no-files-found: error
+          retention-days: 14
