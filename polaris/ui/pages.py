@@ -158,6 +158,13 @@ class HomePage(QWidget):
         self.status = QLabel("Robloxの状態を確認しています…"); self.status.setAlignment(Qt.AlignCenter)
         self.status.setStyleSheet("color:#d4d7e0;font-size:12px;background:transparent;")
         center.addWidget(self.status)
+        # 旧UIテスト・共通APIとの互換性を維持する非表示の診断出力欄。
+        # 見た目の新しいホームレイアウトには影響しない。
+        self.l_status = self.status
+        self.out = QPlainTextEdit()
+        self.out.setObjectName("homeDiagnosticOutput")
+        self.out.setReadOnly(True)
+        self.out.hide()
         outer.addLayout(center); outer.addStretch(5)
         bottom = QHBoxLayout()
         self.footer = QLabel("POLARIS  •  CUSTOM ROBLOX LAUNCHER")

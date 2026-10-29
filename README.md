@@ -62,3 +62,14 @@ GUIテストはオフスクリーン描画で、ページ連打・ワーカー�
 設定 → 外観 →「背景動画・画像を選択」から MP4 などの動画、または画像を選択できます。動画はホーム画面の背景で自動ループ再生され、音声はミュートされます。Qt Multimedia を含む `PySide6` が必要です（`requirements.txt` 更新済み）。
 
 ホーム画面は中央のゲーム選択・プレイボタン・FastFlagsボタンを中心にしたレイアウトです。右上の歯車から設定を開けます。
+
+## GitHub Actions（Windows EXE 自動ビルド）
+
+`.github/workflows/build.yml` を含めて GitHub に push すると、`main` への push / Pull Request / Actions 画面からの手動実行で、Windows 上のテストと EXE ビルドが自動実行されます。
+
+1. リポジトリのルートに `.github/workflows/build.yml` があることを確認します。
+2. 変更を `main` に push します。
+3. GitHub の **Actions → Polaris Windows Build** を開き、実行結果を確認します。
+4. 成功した実行を開き、Artifacts の **Polaris-Windows-Python311** から `Polaris.exe` を取得します。Artifact は 14 日で期限切れになります。
+
+テストが失敗した場合は EXE ビルドを止める設定です。CI の成功は自動テストとパッケージ作成の成功を示しますが、Roblox 実機での起動や FastFlag の反映を保証するものではありません。

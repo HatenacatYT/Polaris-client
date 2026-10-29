@@ -1,48 +1,60 @@
-
 name: Polaris Windows Build
 
 'on':
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
-    branches:
-      - main
+    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
 
-jobs:
-  build:
-    runs-on: windows-latest
+concurrency:
+  group: polaris-build-${{ github.ref }}
+  cancel-in-progress: true
 
+jobs:
+  test-and-build:
+    runs-on: windows-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
 
       - name: Install dependencies
         shell: pwsh
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements-dev.txt
-          python -m pip install pyinstaller
 
-      - name: Run tests
+      - name: Run test suite
         run: python -m pytest -q
 
-      - name: Build Polaris EXE
+      - name: Build Windows executable
         run: python -m PyInstaller --noconfirm --clean Polaris.spec
 
-      - name: Upload Polaris EXE
+      - name: Verify executable exists
+        shell: pwsh
+        run: |
+          if (!(Test-Path 'dist/Polaris.exe')) {
+            Write-Error 'dist/Polaris.exe was not generated.'
+          }
+          Get-Item 'dist/Polaris.exe' | Select-Object Name, Length
+
+      - name: Upload Windows executable
         uses: actions/upload-artifact@v4
         with:
-          name: Polaris-Windows
+          name: Polaris-Windows-Python311
           path: dist/Polaris.exe
           if-no-files-found: error
           retention-days: 14
