@@ -228,7 +228,8 @@ def test_import_export_and_invalid_json(app, win, monkeypatch, tmp_path):
     assert p["flags"] == {"FFlagAbc": "True", "FIntXyz": 5}
     out = tmp_path / "out.json"
     monkeypatch.setattr(ff.QFileDialog, "getSaveFileName", lambda *a, **k: (str(out), ""))
-    fp._do_export(p["id"]); assert json.loads(out.read_text())["flags"] == p["flags"]
+fp._do_export(p["id"])
+assert json.loads(out.read_text(encoding="utf-8"))["flags"] == p["flags"]
     win.edit_preset(p["id"]); monkeypatch.setattr(ff, "choose", lambda *a, **k: 0)
     ed.export(); assert json.loads(out.read_text()) == {"FFlagAbc": "True", "FIntXyz": "5"}
 
