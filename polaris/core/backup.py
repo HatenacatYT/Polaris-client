@@ -40,7 +40,10 @@ class BackupManager:
         files = [Path(f) for f in files if Path(f).is_file()]
         if not files:
             raise StorageError(tr("バックアップ対象のファイルがありません"))
-        bid = f"{datetime.now().strftime('%Y%m%d-%H%M%S-%f')[:-3]}-{kind}"
+        base = f"{datetime.now().strftime('%Y%m%d-%H%M%S-%f')[:-3]}-{kind}"
+        bid, n = base, 1
+        while (Path(self.get_dir()) / bid).exists():     # 同一ミリ秒の連続作成でもIDが衝突しないようにする
+            n += 1; bid = f"{base}-{n}"
         d = Path(self.get_dir()) / bid
         try:
             d.mkdir(parents=True, exist_ok=False)

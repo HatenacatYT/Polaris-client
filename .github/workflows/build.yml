@@ -3,12 +3,17 @@ name: Build Polaris
 on:
   push:
     branches: [main, master]
-    tags: ["v*"]          # v2.0.0 のようなタグを push すると GitHub Release を作成
+    tags: ["v*"]          # pushing a tag such as v2.0.0 also creates a GitHub Release
   pull_request:
-  workflow_dispatch:      # Actions タブから手動実行
+  workflow_dispatch:      # manual run from the Actions tab
 
 permissions:
   contents: read
+
+env:
+  # Windows runners use cp1252 for stdout; force UTF-8 so Japanese text never raises UnicodeEncodeError.
+  PYTHONUTF8: "1"
+  PYTHONIOENCODING: "utf-8"
 
 jobs:
   test:
@@ -19,7 +24,7 @@ jobs:
       matrix:
         python: ["3.11", "3.12"]
     env:
-      QT_QPA_PLATFORM: offscreen      # 画面なしでGUIテストを実行
+      QT_QPA_PLATFORM: offscreen
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -30,15 +35,15 @@ jobs:
       - run: python -m pip install -r requirements-dev.txt
       - name: Syntax check
         run: python -m compileall -q polaris tests tools main.py
-      - name: Unit / GUI tests
+      - name: Unit and GUI tests
         run: python -m pytest -q --maxfail=5
 
   build:
-    name: Build Windows app
+    name: Build single-file Polaris.exe
     needs: test
     runs-on: windows-latest
     permissions:
-      contents: write                 # タグ時の Release 作成に必要
+      contents: write                 # needed to create a Release on tag pushes
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -47,31 +52,36 @@ jobs:
           cache: pip
           cache-dependency-path: requirements-dev.txt
       - run: python -m pip install -r requirements-dev.txt
-      - name: Build with PyInstaller
+      - name: Build with PyInstaller (one file)
         run: python -m PyInstaller --noconfirm --clean polaris.spec
-      - name: Smoke test (起動して数秒で終了しないことを確認)
+      - name: Smoke test (the exe must keep running for 15 seconds)
         shell: pwsh
         run: |
           $env:QT_QPA_PLATFORM = "offscreen"
           $env:APPDATA = "$PWD\smoke_appdata"
-          $p = Start-Process -FilePath "dist\Polaris\Polaris.exe" -PassThru
-          Start-Sleep -Seconds 8
+          $p = Start-Process -FilePath "dist\Polaris.exe" -PassThru
+          Start-Sleep -Seconds 15
           if ($p.HasExited) { Write-Error "Polaris.exe exited early (code $($p.ExitCode))"; exit 1 }
           Stop-Process -Id $p.Id -Force
-          Get-Content "$env:APPDATA\Polaris\logs\polaris.log" -ErrorAction SilentlyContinue | Select-Object -First 20
+          Get-Content "$env:APPDATA\Polaris\logs\polaris.log" -Encoding UTF8 -ErrorAction SilentlyContinue | Select-Object -First 20
       - name: Package
         shell: pwsh
         run: |
-          Copy-Item README.md, CHANGES.md dist\Polaris\
-          Compress-Archive -Path dist\Polaris -DestinationPath Polaris-windows.zip
+          New-Item -ItemType Directory -Path pkg | Out-Null
+          Copy-Item dist\Polaris.exe, README.md, CHANGES.md pkg\
+          Compress-Archive -Path pkg\* -DestinationPath Polaris-windows.zip
       - uses: actions/upload-artifact@v4
         with:
           name: Polaris-windows
-          path: Polaris-windows.zip
+          path: |
+            dist/Polaris.exe
+            Polaris-windows.zip
           if-no-files-found: error
       - name: Create GitHub Release (tag push only)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: Polaris-windows.zip
+          files: |
+            dist/Polaris.exe
+            Polaris-windows.zip
           generate_release_notes: true

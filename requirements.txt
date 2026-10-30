@@ -1,2 +1,2 @@
-# QtMultimedia（背景動画）は PySide6-Addons に含まれるため、完全版の PySide6 を使用します
+# PySide6 (full) is required: QtMultimedia for the background video lives in PySide6-Addons.
 PySide6>=6.6

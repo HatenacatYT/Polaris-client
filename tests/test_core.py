@@ -294,3 +294,20 @@ def test_settings_missing_and_corrupt(tmp_path):
 def test_log_redaction(env):
     from polaris.core.logsetup import redact
     assert "SECRET" not in redact(".ROBLOSECURITY=SECRETVALUE token: SECRET2")
+
+
+def test_build_files_are_ascii_and_bat_is_crlf():
+    """日本語Windows(cp932)や英語ランナー(cp1252)でビルドが文字コードで失敗しないよう、ビルド用ファイルはASCIIのみ。"""
+    root = Path(__file__).resolve().parent.parent
+    for rel in ("run.bat", "run_tests.bat", "build_exe.bat", "build_exe_onedir.bat", "polaris.spec", ".github/workflows/build.yml", "requirements.txt", "requirements-dev.txt"):
+        data = (root / rel).read_bytes()
+        assert all(b < 128 for b in data), f"{rel} に非ASCII文字があります"
+        if rel.endswith(".bat"):
+            assert b"\r\n" in data and b"\n" not in data.replace(b"\r\n", b""), f"{rel} はCRLFである必要があります"
+
+
+def test_backup_ids_never_collide(tmp_path):
+    bm = BackupManager(lambda: tmp_path / "bk")
+    f = tmp_path / "ClientAppSettings.json"; f.write_text("{}")
+    ids = {bm.create("roblox", "x", [f]).id for _ in range(30)}      # 同一ミリ秒に連続作成
+    assert len(ids) == 30 and len(bm.list()) == 30

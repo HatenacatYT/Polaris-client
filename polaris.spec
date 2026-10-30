@@ -1,6 +1,11 @@
-# PyInstaller spec — `pyinstaller --noconfirm --clean polaris.spec` で dist/Polaris/Polaris.exe を生成
-# onedir 形式: onefile だと起動のたびに展開が走り、スプラッシュが出るまで時間がかかるため
+# PyInstaller spec (ASCII only on purpose: old PyInstaller reads specs with the locale encoding).
+#   python -m PyInstaller --noconfirm --clean polaris.spec
+# Default: ONE-FILE build  -> dist/Polaris.exe
+# Set POLARIS_ONEDIR=1     -> folder build (dist/Polaris/Polaris.exe), starts faster because nothing is unpacked at launch.
+import os
 from PyInstaller.utils.hooks import collect_submodules
+
+ONEDIR = os.environ.get("POLARIS_ONEDIR") == "1"
 
 a = Analysis(
     ["main.py"],
@@ -11,5 +16,10 @@ a = Analysis(
               "PySide6.QtCharts", "PySide6.QtDataVisualization", "PySide6.QtPdf", "PySide6.QtSql", "PySide6.QtTest", "tkinter"],
 )
 pyz = PYZ(a.pure)
-exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name="Polaris", console=False, icon="polaris/assets/polaris.ico")
-coll = COLLECT(exe, a.binaries, a.datas, name="Polaris")
+
+if ONEDIR:
+    exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name="Polaris", console=False, icon="polaris/assets/polaris.ico")
+    coll = COLLECT(exe, a.binaries, a.datas, name="Polaris")
+else:
+    exe = EXE(pyz, a.scripts, a.binaries, a.datas, [], name="Polaris", console=False, upx=False,
+              icon="polaris/assets/polaris.ico")
