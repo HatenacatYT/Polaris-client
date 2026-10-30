@@ -1,18 +1,11 @@
 @echo off
-setlocal
+chcp 65001 >nul
 cd /d "%~dp0"
-echo [1/3] Checking Python 3.11...
-py -3.11 --version
-if errorlevel 1 goto error
-echo [2/3] Installing/updating dependencies for the current user...
-py -3.11 -m pip install --user --upgrade -r requirements.txt
-if errorlevel 1 goto error
-echo [3/3] Starting Polaris...
-py -3.11 main.py
-if errorlevel 1 goto error
-exit /b 0
-:error
-echo.
-echo Polaris could not start. Check the message above.
-pause
-exit /b 1
+where py >nul 2>nul || (echo Python 3.11 以降をインストールしてください: https://www.python.org/ & pause & exit /b 1)
+if not exist .venv (
+  echo 初回セットアップ中...
+  py -3 -m venv .venv || (echo 仮想環境の作成に失敗しました & pause & exit /b 1)
+  .venv\Scripts\python -m pip install --upgrade pip
+  .venv\Scripts\python -m pip install -r requirements.txt || (echo 依存ライブラリのインストールに失敗しました & pause & exit /b 1)
+)
+start "" .venv\Scripts\pythonw.exe main.py

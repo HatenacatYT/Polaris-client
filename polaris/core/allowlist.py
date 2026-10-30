@@ -1,5 +1,6 @@
 """公式FastFlag許可リストの取得・保持。古い情報を最新として扱わない。"""
 from __future__ import annotations
+from .i18n import tr, N_
 import html
 import logging
 import re
@@ -44,9 +45,9 @@ class AllowlistStore:
 
     def state_text(self) -> str:
         if not self.names:
-            return "未取得（公式リストを確認できていません）"
-        s = f"{len(self.names)}件 / 確認日時 {self.fetched_at} / 情報源 {self.source}"
-        return s if self.fresh else s + " ／ ⚠ 古い情報の可能性（再取得してください）"
+            return tr("未取得（公式リストを確認できていません）")
+        s = tr("{0}件 / 確認日時 {1} / 情報源 {2}", len(self.names), self.fetched_at, self.source)
+        return s if self.fresh else s + tr(" ／ ⚠ 古い情報の可能性（再取得してください）")
 
     def status(self, name: str) -> str:
         """allowed: 公式掲載(最新) / not_listed: 最新リストに無い / unverified: 確認不能(未取得・期限切れ)"""
@@ -67,16 +68,16 @@ class AllowlistStore:
             cooked = posts[0]["cooked"]
         except (NetworkError, KeyError, IndexError, TypeError) as e:
             log.warning("allowlist取得失敗: %s", e)
-            raise AllowlistError(f"公式リストの取得に失敗しました: {e}") from e
+            raise AllowlistError(tr("公式リストの取得に失敗しました: {0}", e)) from e
         names = extract_flag_names(cooked)  # 1つ目（公式）投稿のみ対象。コメントは対象外。
         if not names:
-            raise AllowlistError("公式投稿からフラグ名を抽出できませんでした（投稿の形式が変わった可能性）")
-        self._store(names, SOURCE_URL + "（自動抽出）", "online")
+            raise AllowlistError(tr("公式投稿からフラグ名を抽出できませんでした（投稿の形式が変わった可能性）"))
+        self._store(names, SOURCE_URL + tr("（自動抽出）"), "online")
         return len(names)
 
     def import_text(self, text: str, label: str) -> int:
         names = extract_flag_names(text)
         if not names:
-            raise AllowlistError("ファイル内にフラグ名が見つかりません")
-        self._store(names, f"ユーザー提供ファイル: {label}", "file")
+            raise AllowlistError(tr("ファイル内にフラグ名が見つかりません"))
+        self._store(names, tr("ユーザー提供ファイル: {0}", label), "file")
         return len(names)

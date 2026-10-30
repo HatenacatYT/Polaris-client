@@ -1,60 +1,77 @@
-name: Polaris Windows Build
+name: Build Polaris
 
-'on':
+on:
   push:
-    branches: [main]
+    branches: [main, master]
+    tags: ["v*"]          # v2.0.0 のようなタグを push すると GitHub Release を作成
   pull_request:
-    branches: [main]
-  workflow_dispatch:
+  workflow_dispatch:      # Actions タブから手動実行
 
 permissions:
   contents: read
 
-concurrency:
-  group: polaris-build-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
-  test-and-build:
+  test:
+    name: Test (Python ${{ matrix.python }})
     runs-on: windows-latest
-    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12"]
+    env:
+      QT_QPA_PLATFORM: offscreen      # 画面なしでGUIテストを実行
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: ${{ matrix.python }}
           cache: pip
-          cache-dependency-path: |
-            requirements.txt
-            requirements-dev.txt
+          cache-dependency-path: requirements-dev.txt
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Syntax check
+        run: python -m compileall -q polaris tests tools main.py
+      - name: Unit / GUI tests
+        run: python -m pytest -q --maxfail=5
 
-      - name: Install dependencies
-        shell: pwsh
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r requirements-dev.txt
-
-      - name: Run test suite
-        run: python -m pytest -q
-
-      - name: Build Windows executable
-        run: python -m PyInstaller --noconfirm --clean Polaris.spec
-
-      - name: Verify executable exists
-        shell: pwsh
-        run: |
-          if (!(Test-Path 'dist/Polaris.exe')) {
-            Write-Error 'dist/Polaris.exe was not generated.'
-          }
-          Get-Item 'dist/Polaris.exe' | Select-Object Name, Length
-
-      - name: Upload Windows executable
-        uses: actions/upload-artifact@v4
+  build:
+    name: Build Windows app
+    needs: test
+    runs-on: windows-latest
+    permissions:
+      contents: write                 # タグ時の Release 作成に必要
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
-          name: Polaris-Windows-Python311
-          path: dist/Polaris.exe
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Build with PyInstaller
+        run: python -m PyInstaller --noconfirm --clean polaris.spec
+      - name: Smoke test (起動して数秒で終了しないことを確認)
+        shell: pwsh
+        run: |
+          $env:QT_QPA_PLATFORM = "offscreen"
+          $env:APPDATA = "$PWD\smoke_appdata"
+          $p = Start-Process -FilePath "dist\Polaris\Polaris.exe" -PassThru
+          Start-Sleep -Seconds 8
+          if ($p.HasExited) { Write-Error "Polaris.exe exited early (code $($p.ExitCode))"; exit 1 }
+          Stop-Process -Id $p.Id -Force
+          Get-Content "$env:APPDATA\Polaris\logs\polaris.log" -ErrorAction SilentlyContinue | Select-Object -First 20
+      - name: Package
+        shell: pwsh
+        run: |
+          Copy-Item README.md, CHANGES.md dist\Polaris\
+          Compress-Archive -Path dist\Polaris -DestinationPath Polaris-windows.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Polaris-windows
+          path: Polaris-windows.zip
           if-no-files-found: error
-          retention-days: 14
+      - name: Create GitHub Release (tag push only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: Polaris-windows.zip
+          generate_release_notes: true

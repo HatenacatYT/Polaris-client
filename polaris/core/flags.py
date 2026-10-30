@@ -1,5 +1,6 @@
 """FastFlagのモデル・検証・差分・プリセット。アプリ独自データとRoblox出力は分離する。"""
 from __future__ import annotations
+from .i18n import tr, N_
 import json
 import logging
 import math
@@ -31,14 +32,14 @@ def value_type(v: Any) -> str:
 def validate_flag(name: Any, value: Any) -> list[str]:
     errs = []
     if not isinstance(name, str) or not FLAG_NAME_RE.match(name):
-        errs.append(f"不正なフラグ名: {name!r}")
+        errs.append(tr("不正なフラグ名: {0!r}", name))
     t = value_type(value)
     if t == "invalid":
-        errs.append(f"{name}: 未対応の値の型です（真偽値・数値・文字列のみ）")
+        errs.append(tr("{0}: 未対応の値の型です（真偽値・数値・文字列のみ）", name))
     elif t == "float" and not math.isfinite(value):
-        errs.append(f"{name}: 数値が不正です")
+        errs.append(tr("{0}: 数値が不正です", name))
     elif t == "string" and len(value) > 1024:
-        errs.append(f"{name}: 文字列が長すぎます")
+        errs.append(tr("{0}: 文字列が長すぎます", name))
     return errs
 
 
@@ -53,14 +54,14 @@ def parse_value_text(text: str) -> Any:
     """入力テキスト→JSON値。JSONとして解釈できなければ文字列として扱う（例: True は文字列）。"""
     s = text.strip()
     if not s:
-        raise ValueError("値が空です")
+        raise ValueError(tr("値が空です"))
     try:
-        v = json.loads(s, parse_constant=lambda c: (_ for _ in ()).throw(ValueError("使用できない定数")))
+        v = json.loads(s, parse_constant=lambda c: (_ for _ in ()).throw(ValueError(tr("使用できない定数"))))
     except ValueError:
         return s
     if isinstance(v, (bool, int, float, str)):
         return v
-    raise ValueError("値には真偽値・数値・文字列のみ使用できます")
+    raise ValueError(tr("値には真偽値・数値・文字列のみ使用できます"))
 
 
 def loads_checked(text: str) -> tuple[dict | None, list[str], list[str]]:
@@ -76,14 +77,14 @@ def loads_checked(text: str) -> tuple[dict | None, list[str], list[str]]:
         return seen
 
     def bad(c):
-        raise ValueError(f"使用できない定数: {c}")
+        raise ValueError(tr("使用できない定数: {0}", c))
 
     try:
         data = json.loads(text, object_pairs_hook=hook, parse_constant=bad)
     except ValueError as e:
-        return None, sorted(set(dups)), [f"JSON構文エラー: {e}"]
+        return None, sorted(set(dups)), [tr("JSON構文エラー: {0}", e)]
     if not isinstance(data, dict):
-        return None, [], ["最上位は {...} 形式のオブジェクトである必要があります"]
+        return None, [], [tr("最上位は {...} 形式のオブジェクトである必要があります")]
     return data, sorted(set(dups)), validate_flags(data)
 
 
@@ -116,8 +117,8 @@ class FlagDiff:
         for k, (o, n) in self.changed.items():
             lines.append(f"~ {k}: {o!r} → {n!r}")
         for k, v in self.removed.items():
-            lines.append(f"- {k} (現在の値: {v!r})")
-        return "\n".join(lines) or "（変更なし）"
+            lines.append(tr("- {0} (現在の値: {1!r})", k, v))
+        return "\n".join(lines) or tr("（変更なし）")
 
 
 def diff_payload(old: dict, new: dict) -> FlagDiff:
@@ -167,7 +168,7 @@ class FlagStore:
         if errs:
             raise ValueError("; ".join(errs))
         if name in self.flags:
-            raise ValueError(f"{name} は既に存在します")
+            raise ValueError(tr("{0} は既に存在します", name))
         f = self.flags[name] = Flag(name, value, enabled, category if category in CATEGORIES else "その他", False, note)
         log.info("flag_add name=%s", name)
         if save:
@@ -187,7 +188,7 @@ class FlagStore:
         if new == old:
             return
         if new in self.flags:
-            raise ValueError(f"{new} は既に存在します")
+            raise ValueError(tr("{0} は既に存在します", new))
         errs = validate_flag(new, self.flags[old].value)
         if errs:
             raise ValueError("; ".join(errs))
@@ -233,6 +234,27 @@ class FlagStore:
         return {n: f.value for n, f in self.flags.items() if f.enabled}
 
 
+class DuplicateName(ValueError):
+    pass
+
+
+def _now() -> str:
+    from datetime import datetime
+    return datetime.now().isoformat(timespec="seconds")
+
+
+def check_preset_name(name: str) -> str:
+    """不正な名前なら理由を返す（空文字=問題なし）。"""
+    n = (name or "").strip()
+    if not n:
+        return tr("名前を入力してください")
+    if len(n) > 60:
+        return tr("名前は60文字以内にしてください")
+    if any(ord(c) < 32 for c in n):
+        return tr("名前に使用できない文字が含まれています")
+    return ""
+
+
 class PresetStore:
     def __init__(self, path):
         self.path = path
@@ -246,6 +268,8 @@ class PresetStore:
             if isinstance(p, dict) and isinstance(p.get("flags"), dict) and isinstance(p.get("name"), str):
                 p.setdefault("id", uuid.uuid4().hex)
                 p["category"] = p.get("category") if p.get("category") in CATEGORIES else "その他"
+                p["description"] = p.get("description") if isinstance(p.get("description"), str) else ""
+                p.setdefault("created_at", ""); p.setdefault("updated_at", p.get("created_at", ""))
                 self.presets.append(p)
 
     def save(self):
@@ -254,15 +278,30 @@ class PresetStore:
     def get(self, pid):
         return next((p for p in self.presets if p["id"] == pid), None)
 
-    def create(self, name, category="その他", flags=None) -> dict:
+    def name_exists(self, name: str, exclude: str | None = None) -> bool:
+        n = name.strip().casefold()
+        return any(p["name"].strip().casefold() == n and p["id"] != exclude for p in self.presets)
+
+    def unique_name(self, base: str) -> str:
+        base, i, cand = base.strip(), 2, base.strip()
+        while self.name_exists(cand):
+            cand, i = f"{base} ({i})", i + 1
+        return cand
+
+    def create(self, name, category="その他", flags=None, description="") -> dict:
         name = name.strip()
-        if not name:
-            raise ValueError("プリセット名が空です")
+        bad = check_preset_name(name)
+        if bad:
+            raise ValueError(bad)
+        if self.name_exists(name):
+            raise DuplicateName(tr("同名のプリセットが既に存在します: {0}", name))
         errs = validate_flags(flags or {})
         if errs:
             raise ValueError("; ".join(errs))
-        p = {"id": uuid.uuid4().hex, "name": name, "category": category if category in CATEGORIES else "その他",
-             "flags": dict(flags or {})}
+        now = _now()
+        p = {"id": uuid.uuid4().hex, "name": name, "description": description.strip()[:200],
+             "category": category if category in CATEGORIES else "その他", "flags": dict(flags or {}),
+             "created_at": now, "updated_at": now}
         self.presets.append(p)
         log.info("preset_create name=%s", name)
         self.save()
@@ -276,16 +315,27 @@ class PresetStore:
             errs = validate_flags(kw["flags"])
             if errs:
                 raise ValueError("; ".join(errs))
-        if "name" in kw and not kw["name"].strip():
-            raise ValueError("プリセット名が空です")
+        if "name" in kw:
+            kw["name"] = kw["name"].strip()
+            bad = check_preset_name(kw["name"])
+            if bad:
+                raise ValueError(bad)
+            if self.name_exists(kw["name"], exclude=pid):
+                raise DuplicateName(tr("同名のプリセットが既に存在します: {0}", kw['name']))
+        if "category" in kw and kw["category"] not in CATEGORIES:
+            kw["category"] = "その他"
         p.update(kw)
+        p["updated_at"] = _now()
         self.save()
+
+    def rename(self, pid, name):
+        self.update(pid, name=name)
 
     def duplicate(self, pid) -> dict:
         p = self.get(pid)
         if p is None:
             raise KeyError(pid)
-        return self.create(p["name"] + " (コピー)", p["category"], p["flags"])
+        return self.create(self.unique_name(p["name"] + " (copy)"), p["category"], p["flags"], p.get("description", ""))
 
     def delete(self, pid):
         self.presets = [p for p in self.presets if p["id"] != pid]

@@ -1,5 +1,6 @@
 """Roblox Player のインストール検出。バージョンフォルダ名は固定せず、実体を検証して判断する。"""
 from __future__ import annotations
+from .i18n import tr, N_
 import logging
 import os
 import re
@@ -109,27 +110,27 @@ class Detector:
         cands = self.candidates()
         if not cands:
             log.warning("roblox_not_found roots=%s", [str(r) for r in self.roots])
-            raise RobloxNotFound("Roblox Player が見つかりません。Robloxをインストールして一度起動してください。")
+            raise RobloxNotFound(tr("Roblox Player が見つかりません。Robloxをインストールして一度起動してください。"))
         if len(cands) == 1:
-            return self._make(cands[0], "唯一の有効な環境", 1)
+            return self._make(cands[0], tr("唯一の有効な環境"), 1)
         # 複数: 公式の最新バージョン名 → プロトコル登録 → ユーザー固定 の順。更新日時は根拠にしない。
         official = self.official_fn() if use_network else None
         if official:
             for d in cands:
                 if d.name == official:
-                    return self._make(d, "公式の最新バージョンと一致", len(cands))
+                    return self._make(d, tr("公式の最新バージョンと一致"), len(cands))
         hint = self.registry_fn()
         if hint:
             for d in cands:
                 if d == hint or d.resolve() == Path(hint).resolve():
-                    return self._make(d, "プロトコル登録(レジストリ)と一致", len(cands))
+                    return self._make(d, tr("プロトコル登録(レジストリ)と一致"), len(cands))
         pin = self.pinned_fn()
         if pin:
             for d in cands:
                 if str(d) == pin:
-                    return self._make(d, "ユーザーが選択した環境", len(cands))
+                    return self._make(d, tr("ユーザーが選択した環境"), len(cands))
         log.warning("roblox_ambiguous candidates=%s", [str(c) for c in cands])
-        raise RobloxAmbiguous("有効なRobloxの環境が複数あり、どれが現在使用中か判断できません。使用する環境を選択してください。", cands)
+        raise RobloxAmbiguous(tr("有効なRobloxの環境が複数あり、どれが現在使用中か判断できません。使用する環境を選択してください。"), cands)
 
 
 def roblox_process_running() -> bool:

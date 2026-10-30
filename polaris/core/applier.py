@@ -1,5 +1,6 @@
 """FastFlagをRobloxのClientAppSettings.jsonへ安全に適用する。"""
 from __future__ import annotations
+from .i18n import tr, N_
 import json
 import logging
 from dataclasses import dataclass, field
@@ -33,20 +34,20 @@ def _within(child: Path, parent: Path) -> bool:
 def apply_flags(backups: BackupManager, install: RobloxInstall, flags: dict, fmt: str = "string") -> ApplyResult:
     errs = validate_flags(flags)
     if errs:
-        return ApplyResult(False, "設定の検証に失敗しました:\n" + "\n".join(errs[:10]))
+        return ApplyResult(False, tr("設定の検証に失敗しました:\n") + "\n".join(errs[:10]))
     target = client_settings_path(install)
     if not _within(target, install.version_dir) or not install.version_dir.is_dir():
-        return ApplyResult(False, f"適用先が不正、または存在しません: {target}")
+        return ApplyResult(False, tr("適用先が不正、または存在しません: {0}", target))
     payload = to_roblox_payload(flags, fmt)
     existed = target.exists()
     bid = ""
     try:
         if existed:
-            bid = backups.create("roblox", "FastFlag適用前", [target]).id
+            bid = backups.create("roblox", "pre-apply", [target]).id
         target.parent.mkdir(parents=True, exist_ok=True)
         write_json(target, payload, keep_bak=False)
         if json.loads(target.read_text("utf-8")) != payload:
-            raise StorageError("書き込み後の再読み込み検証に失敗しました")
+            raise StorageError(tr("書き込み後の再読み込み検証に失敗しました"))
     except (StorageError, OSError, ValueError) as e:
         rolled = False
         try:
@@ -59,6 +60,6 @@ def apply_flags(backups: BackupManager, install: RobloxInstall, flags: dict, fmt
         except Exception as e2:  # noqa
             log.error("ロールバック失敗: %s", e2)
         log.error("apply_failed path=%s error=%s rolled_back=%s", target, e, rolled)
-        return ApplyResult(False, f"適用に失敗しました: {e}" + ("\n元の状態に戻しました。" if rolled else ""), target, bid, rolled)
+        return ApplyResult(False, tr("適用に失敗しました: {0}", e) + (tr("\n元の状態に戻しました。") if rolled else ""), target, bid, rolled)
     log.info("apply_ok path=%s flags=%d backup=%s", target, len(payload), bid)
-    return ApplyResult(True, f"{len(payload)}件を書き込みました（Roblox側で実際に反映されたかは未確認）", target, bid)
+    return ApplyResult(True, tr("{0}件を書き込みました（Roblox側で実際に反映されたかは未確認）", len(payload)), target, bid)

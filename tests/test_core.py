@@ -129,7 +129,7 @@ def test_flag_crud(tmp_path):
 def test_preset_crud(tmp_path):
     p = PresetStore(tmp_path / "p.json")
     a = p.create("A", "UI", {"FFlagAaa": True}); b = p.duplicate(a["id"])
-    assert b["name"].endswith("(コピー)") and len(PresetStore(tmp_path / "p.json").presets) == 2
+    assert b["name"].endswith("(copy)") and len(PresetStore(tmp_path / "p.json").presets) == 2
     with pytest.raises(ValueError):
         p.create("", "UI")
     p.delete(a["id"]); assert p.get(a["id"]) is None

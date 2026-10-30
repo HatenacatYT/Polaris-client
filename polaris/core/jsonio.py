@@ -1,5 +1,6 @@
 """破損・途中終了に強いJSON入出力（一時ファイル→検証→置換、.bakから復旧）。"""
 from __future__ import annotations
+from .i18n import tr, N_
 import copy
 import json
 import logging
@@ -19,7 +20,7 @@ class StorageError(Exception):
 
 
 def _reject_const(c):
-    raise ValueError(f"使用できない定数: {c}")
+    raise ValueError(tr("使用できない定数: {0}", c))
 
 
 def _load(p: Path) -> Any:
@@ -36,9 +37,9 @@ def read_json(path, default: Any, check: Callable[[Any], bool] | None = None) ->
         try:
             data = _load(cand)
             if check and not check(data):
-                raise ValueError("想定外のデータ構造")
+                raise ValueError(tr("想定外のデータ構造"))
             if is_bak:
-                msg = f"{path.name} が破損していたため、直前のバックアップ(.bak)から復旧しました。"
+                msg = tr("{0} が破損していたため、直前のバックアップ(.bak)から復旧しました。", path.name)
                 RECOVERY_NOTES.append(msg)
                 log.warning(msg)
             return data
@@ -48,7 +49,7 @@ def read_json(path, default: Any, check: Callable[[Any], bool] | None = None) ->
                 try:
                     q = path.with_name(f"{path.name}.corrupt-{time.strftime('%Y%m%d-%H%M%S')}")
                     os.replace(path, q)
-                    RECOVERY_NOTES.append(f"{path.name} が破損していたため {q.name} に退避しました。")
+                    RECOVERY_NOTES.append(tr("{0} が破損していたため {1} に退避しました。", path.name, q.name))
                 except OSError:
                     pass
     return default() if callable(default) else copy.deepcopy(default)
@@ -67,7 +68,7 @@ def write_json(path, data: Any, *, indent: int | None = 2, keep_bak: bool = True
             f.flush()
             os.fsync(f.fileno())
         if json.loads(tmp.read_text("utf-8")) != json.loads(text):
-            raise ValueError("書き込み後の検証に失敗")
+            raise ValueError(tr("書き込み後の検証に失敗"))
         if keep_bak and path.exists():
             try:
                 shutil.copy2(path, path.with_name(path.name + ".bak"))
@@ -76,11 +77,11 @@ def write_json(path, data: Any, *, indent: int | None = 2, keep_bak: bool = True
         os.replace(tmp, path)
         tmp = None
     except PermissionError as e:
-        raise StorageError(f"書き込み権限がない、または他のアプリが使用中です: {path}") from e
+        raise StorageError(tr("書き込み権限がない、または他のアプリが使用中です: {0}", path)) from e
     except OSError as e:
-        raise StorageError(f"書き込みに失敗しました（ディスク容量不足の可能性）: {path} ({e})") from e
+        raise StorageError(tr("書き込みに失敗しました（ディスク容量不足の可能性）: {0} ({1})", path, e)) from e
     except (ValueError, TypeError) as e:
-        raise StorageError(f"JSONの書き込みに失敗しました: {e}") from e
+        raise StorageError(tr("JSONの書き込みに失敗しました: {0}", e)) from e
     finally:
         if tmp is not None:
             try:

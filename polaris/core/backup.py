@@ -1,5 +1,6 @@
 """バックアップ/復元。保存先・保存数・保存期間は設定可能。"""
 from __future__ import annotations
+from .i18n import tr, N_
 import json
 import logging
 import os
@@ -38,7 +39,7 @@ class BackupManager:
     def create(self, kind: str, label: str, files: list[Path]) -> BackupEntry:
         files = [Path(f) for f in files if Path(f).is_file()]
         if not files:
-            raise StorageError("バックアップ対象のファイルがありません")
+            raise StorageError(tr("バックアップ対象のファイルがありません"))
         bid = f"{datetime.now().strftime('%Y%m%d-%H%M%S-%f')[:-3]}-{kind}"
         d = Path(self.get_dir()) / bid
         try:
@@ -53,7 +54,7 @@ class BackupManager:
             write_json(d / "meta.json", meta, keep_bak=False)
         except OSError as e:
             shutil.rmtree(d, ignore_errors=True)
-            raise StorageError(f"バックアップを作成できません（権限・容量を確認）: {e}") from e
+            raise StorageError(tr("バックアップを作成できません（権限・容量を確認）: {0}", e)) from e
         log.info("backup_created id=%s kind=%s files=%s", bid, kind, [m["source"] for m in meta_files])
         return BackupEntry(bid, meta["created_at"], kind, label, d, meta_files)
 
@@ -79,14 +80,14 @@ class BackupManager:
     @staticmethod
     def _check_target(name: str, target: Path):
         if name not in ALLOWED_NAMES or target.name != name:
-            raise RestoreError(f"復元先として許可されていないファイルです: {target.name}")
+            raise RestoreError(tr("復元先として許可されていないファイルです: {0}", target.name))
         if name == "ClientAppSettings.json" and target.parent.name != "ClientSettings":
-            raise RestoreError("Roblox設定の復元先が ClientSettings フォルダではありません")
+            raise RestoreError(tr("Roblox設定の復元先が ClientSettings フォルダではありません"))
 
     def restore(self, bid: str) -> list[Path]:
         e = self.get(bid)
         if e is None:
-            raise RestoreError("バックアップが見つかりません")
+            raise RestoreError(tr("バックアップが見つかりません"))
         plan = []
         for m in e.files:
             src, target = e.dir / m["stored"], Path(m["source"])
@@ -94,19 +95,18 @@ class BackupManager:
             try:
                 json.loads(src.read_text("utf-8"))
             except (OSError, ValueError) as ex:
-                raise RestoreError(f"バックアップ内の {m['name']} が壊れています: {ex}") from ex
+                raise RestoreError(tr("バックアップ内の {0} が壊れています: {1}", m['name'], ex)) from ex
             if not target.parent.exists() and m["name"] != "ClientAppSettings.json":
                 target.parent.mkdir(parents=True, exist_ok=True)
             if m["name"] == "ClientAppSettings.json" and not target.parent.parent.exists():
-                raise RestoreError(f"復元先のRobloxフォルダが存在しません（Roblox更新で場所が変わった可能性）: {target.parent.parent}\n"
-                                   "Roblox環境を再検出し、FastFlag適用で新しい環境へ反映してください。")
+                raise RestoreError(tr("復元先のRobloxフォルダが存在しません（Roblox更新で場所が変わった可能性）: {0}\nRoblox環境を再検出し、FastFlag適用で新しい環境へ反映してください。", target.parent.parent))
             plan.append((src, target))
         done = []
         for src, target in plan:
             tmp = None
             try:
                 if target.exists():
-                    self.create("pre-restore", f"復元前の自動退避 ({e.id})", [target])
+                    self.create("pre-restore", f"pre-restore:{e.id}", [target])
                 target.parent.mkdir(parents=True, exist_ok=True)
                 fd, name = tempfile.mkstemp(prefix=target.name + ".", suffix=".tmp", dir=target.parent)
                 os.close(fd)
@@ -116,10 +116,9 @@ class BackupManager:
                 tmp = None
                 done.append(target)
             except PermissionError as ex:
-                raise RestoreError(f"書き込み権限がないか、他のアプリが使用中です: {target}\n"
-                                   "Robloxを終了し、ファイルが読み取り専用でないか確認してから再試行してください。") from ex
+                raise RestoreError(tr("書き込み権限がないか、他のアプリが使用中です: {0}\nRobloxを終了し、ファイルが読み取り専用でないか確認してから再試行してください。", target)) from ex
             except (OSError, StorageError) as ex:
-                raise RestoreError(f"復元に失敗しました: {ex}\n復元前の状態は『pre-restore』バックアップから戻せます。") from ex
+                raise RestoreError(tr("復元に失敗しました: {0}\n復元前の状態は『pre-restore』バックアップから戻せます。", ex)) from ex
             finally:
                 if tmp is not None:
                     try:

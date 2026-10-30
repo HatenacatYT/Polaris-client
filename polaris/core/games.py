@@ -1,5 +1,6 @@
 """ゲームライブラリ。Place ID/URLの厳格な検証を含む。"""
 from __future__ import annotations
+from .i18n import tr, N_
 import logging
 import re
 import uuid
@@ -21,7 +22,7 @@ class InvalidPlace(ValueError):
 
 def validate_place_id(v) -> int:
     if isinstance(v, bool) or not isinstance(v, int) or not (1 <= v <= PLACE_ID_MAX):
-        raise InvalidPlace(f"Place IDが不正です: {v!r}")
+        raise InvalidPlace(tr("Place IDが不正です: {0!r}", v))
     return v
 
 
@@ -29,7 +30,7 @@ def parse_place_input(text: str) -> int:
     """数字のPlace ID、または https://www.roblox.com/games/<id>/... 形式のURLのみ受け付ける。"""
     s = (text or "").strip()
     if not s:
-        raise InvalidPlace("Place IDまたはURLを入力してください")
+        raise InvalidPlace(tr("Place IDまたはURLを入力してください"))
     if re.fullmatch(r"[0-9]{1,16}", s):
         return validate_place_id(int(s))
     if re.match(r"(?i)^(www\.)?roblox\.com/", s):
@@ -37,14 +38,14 @@ def parse_place_input(text: str) -> int:
     try:
         u = urlsplit(s)
     except ValueError:
-        raise InvalidPlace("URLを解析できません")
+        raise InvalidPlace(tr("URLを解析できません"))
     if u.scheme.lower() != "https":
-        raise InvalidPlace("https のRoblox URLのみ対応しています")
+        raise InvalidPlace(tr("https のRoblox URLのみ対応しています"))
     if u.netloc.lower() not in ("www.roblox.com", "roblox.com"):
-        raise InvalidPlace("roblox.com 以外のURLは対応していません")
+        raise InvalidPlace(tr("roblox.com 以外のURLは対応していません"))
     m = _PATH.match(u.path)
     if not m:
-        raise InvalidPlace("対応形式は https://www.roblox.com/games/<PlaceID>/... です")
+        raise InvalidPlace(tr("対応形式は https://www.roblox.com/games/<PlaceID>/... です"))
     return validate_place_id(int(m.group(1)))
 
 
@@ -65,11 +66,11 @@ def fetch_game_name(place_id: int, timeout: float = 6.0) -> str:
     uni = http_get_json(f"https://apis.roblox.com/universes/v1/places/{place_id}/universe", timeout)
     uid = uni.get("universeId") if isinstance(uni, dict) else None
     if not isinstance(uid, int):
-        raise NetworkError("ゲーム情報が見つかりません（非公開、または存在しないPlace ID）")
+        raise NetworkError(tr("ゲーム情報が見つかりません（非公開、または存在しないPlace ID）"))
     info = http_get_json(f"https://games.roblox.com/v1/games?universeIds={uid}", timeout)
     data = info.get("data") if isinstance(info, dict) else None
     if not data or not isinstance(data[0].get("name"), str):
-        raise NetworkError("ゲーム名を取得できませんでした")
+        raise NetworkError(tr("ゲーム名を取得できませんでした"))
     return data[0]["name"][:100]
 
 
@@ -118,7 +119,7 @@ class GameLibrary:
     def add(self, place_input, name: str = "") -> Game:
         pid = parse_place_input(place_input) if not isinstance(place_input, int) else validate_place_id(place_input)
         if any(g.place_id == pid for g in self.games):
-            raise ValueError(f"Place ID {pid} は既に登録されています")
+            raise ValueError(tr("Place ID {0} は既に登録されています", pid))
         g = Game(uuid.uuid4().hex, (name or "").strip()[:100] or f"Place {pid}", pid, added_at=now_iso())
         self.games.append(g)
         log.info("game_add place_id=%d", pid)

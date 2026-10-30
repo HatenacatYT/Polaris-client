@@ -12,6 +12,7 @@ from .. import __version__
 from .allowlist import AllowlistStore
 from .backup import BackupManager
 from .flags import FlagStore, PresetStore, EDITOR_PRESET_ID
+from .i18n import set_language, tr, N_
 from .games import GameLibrary
 from .launcher import Launcher
 from .logsetup import setup_logging, MEMORY, anonymize
@@ -34,6 +35,7 @@ class Core:
     def __init__(self, paths: AppPaths | None = None, *, detector=None, launcher_kwargs=None):
         self.paths = paths or AppPaths.default()
         setup_logging(self.paths.logs)
+        self._early_language()
         log.info("app_start version=%s python=%s os=%s", __version__, platform.python_version(), platform.platform())
         self.settings = SettingsStore(self.paths.settings_file)
         self.state = StateStore(self.paths.state_file)
@@ -44,7 +46,63 @@ class Core:
         self.backups = BackupManager(self.backup_dir)
         self.detector = detector or Detector(pinned_fn=lambda: self.settings.data.pinned_version_dir)
         self.launcher = Launcher(self, **(launcher_kwargs or {}))
-        self.last_detection = Detection(code="NOT_CHECKED", message="未確認")
+        self.last_detection = Detection(code="NOT_CHECKED", message=tr("未確認"))
+        set_language(self.settings.data.language)
+        self._migrate_editor_flags()
+
+    def _early_language(self):
+        """設定読込中のメッセージも正しい言語になるよう、先に言語だけ読む。"""
+        import json
+        try:
+            set_language(json.loads(self.paths.settings_file.read_text("utf-8")).get("language", "ja"))
+        except (OSError, ValueError, AttributeError):
+            set_language("ja")
+
+    def _migrate_editor_flags(self):
+        """旧バージョンの『エディター』のフラグをプリセットへ移行する（元ファイルは残す）。"""
+        if self.state.get("migrated_v2"):
+            return
+        try:
+            new_id = ""
+            if self.flags.flags:
+                p = self.presets.create(self.presets.unique_name(tr("移行: 以前のエディター設定")), "その他",
+                                        {n: f.value for n, f in self.flags.flags.items()},
+                                        tr("旧バージョンのFastFlagエディターから移行"))
+                new_id = p["id"]
+            if self.settings.data.active_preset == EDITOR_PRESET_ID:
+                self.settings.data.active_preset = new_id
+                self.settings.save()
+            for g in self.games.games:
+                if g.preset_id == EDITOR_PRESET_ID:
+                    g.preset_id = new_id
+            self.games.save()
+            self.state.set("migrated_v2", True)
+            log.info("migrated_editor_flags preset=%s", new_id)
+        except Exception as e:  # noqa  移行失敗でも起動は継続（次回再試行）
+            log.error("migration_failed %s", e)
+
+    def selected_game(self):
+        g = self.games.get(self.settings.data.selected_game_id)
+        return g or (self.games.games[0] if self.games.games else None)
+
+    def select_game(self, gid: str):
+        self.settings.data.selected_game_id = gid
+        self.settings.save()
+
+    def active_preset(self):
+        return self.presets.get(self.settings.data.active_preset)
+
+    def preset_apply_state(self, pid: str) -> tuple[str, str]:
+        """('applied'|'modified'|'outdated'|'none', 適用日時)。書き込み済み≠Robloxでの反映確認済み。"""
+        la, p = self.state.get("last_apply"), self.presets.get(pid)
+        if not la or not la.get("ok") or la.get("preset") != pid or p is None:
+            return "none", ""
+        if (p.get("updated_at") or "") > la.get("at", ""):
+            return "modified", la["at"]
+        inst = self.last_detection.install
+        if inst and la.get("version_dir") != str(inst.version_dir):
+            return "outdated", la["at"]
+        return "applied", la["at"]
 
     def backup_dir(self) -> Path:
         d = self.settings.data.backup_dir
@@ -66,8 +124,8 @@ class Core:
         return dict(p["flags"])
 
     def preset_choices(self) -> list[tuple[str, str]]:
-        return [("", "（適用しない）"), (EDITOR_PRESET_ID, "エディターの現在の設定")] + \
-               [(p["id"], f"{p['name']}［{p['category']}］") for p in self.presets.presets]
+        return [("", tr("（適用しない）"))] + \
+               [(p["id"], tr("{0}［{1}］", p['name'], p['category'])) for p in self.presets.presets]
 
     def detect_outcome(self, use_network: bool = True) -> Detection:
         try:
@@ -78,7 +136,7 @@ class Core:
             d = Detection(code="AMBIGUOUS", message=str(e), candidates=e.candidates)
         except Exception as e:  # noqa  検出中の予期しない例外でも落とさない
             log.exception("detect_error")
-            d = Detection(code="ERROR", message=f"検出中にエラーが発生しました: {e}")
+            d = Detection(code="ERROR", message=tr("検出中にエラーが発生しました: {0}", e))
         new = str(d.install.version_dir) if d.install else ""
         old = self.state.get("last_detected_dir", "")
         if d.install and old and old != new:
@@ -107,11 +165,11 @@ class Core:
     def diagnostics_text(self) -> str:
         d = self.last_detection
         lines = [f"Polaris {__version__}", f"Python {platform.python_version()} / {platform.platform()}",
-                 f"時刻: {datetime.now().isoformat(timespec='seconds')}",
-                 f"Roblox検出: {'OK ' + str(d.install.version_dir) + ' (' + d.install.verified_by + ')' if d.install else d.code + ' ' + d.message}",
-                 f"許可リスト: {self.allowlist.state_text()}",
-                 f"フラグ数: {len(self.flags.flags)} / プリセット数: {len(self.presets.presets)} / ゲーム数: {len(self.games.games)}",
-                 f"最後の適用: {self.state.get('last_apply')}", "", "---- ログ ----", *MEMORY.lines]
+                 tr("時刻: {0}", datetime.now().isoformat(timespec='seconds')),
+                 tr("Roblox検出: {0}", 'OK ' + str(d.install.version_dir) + ' (' + d.install.verified_by + ')' if d.install else d.code + ' ' + d.message),
+                 tr("許可リスト: {0}", self.allowlist.state_text()),
+                 tr("フラグ数: {0} / プリセット数: {1} / ゲーム数: {2}", len(self.flags.flags), len(self.presets.presets), len(self.games.games)),
+                 tr("最後の適用: {0}", self.state.get('last_apply')), "", tr("---- ログ ----"), *MEMORY.lines]
         return anonymize("\n".join(lines))
 
     def export_diagnostics(self, dest: Path) -> Path:

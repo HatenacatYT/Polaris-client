@@ -1,5 +1,6 @@
 """重い処理をGUIスレッド外で実行する。コールバックは必ずGUIスレッドで呼ばれる。"""
 from __future__ import annotations
+from ..core.i18n import tr
 import itertools
 import logging
 
@@ -23,7 +24,7 @@ class _Task(QRunnable):
         try:
             res, ok = self.fn(*self.args, **self.kwargs), True
         except Exception as e:  # noqa  ワーカー内の例外でアプリを落とさない
-            log.exception("worker_error")
+            (log.warning if isinstance(e, (ValueError, OSError)) else log.exception)("worker_error: %r", e)   # 想定内の失敗は警告のみ
             res, ok = e, False
         self.sig.finished.emit(self.tid, ok, res)
 
@@ -43,12 +44,13 @@ class TaskRunner(QObject):
     def active_count(self) -> int:
         return len(self._active)
 
-    def run(self, fn, on_done=None, on_error=None, *args, label="処理中", **kwargs):
+    def run(self, fn, on_done=None, on_error=None, *args, label=None, **kwargs):
         if self._closed:
             return
         tid = next(self._ids)
         t = _Task(tid, fn, args, kwargs)
         t.sig.finished.connect(self._on_finished)
+        label = label or tr("処理中")
         self._active[tid] = (t, on_done, on_error, label)
         self.busy_changed.emit(True, label)
         self.pool.start(t)

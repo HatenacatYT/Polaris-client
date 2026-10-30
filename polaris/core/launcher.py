@@ -1,5 +1,6 @@
 """起動フロー: prepare(検証・差分算出) → execute(バックアップ・適用・起動要求)。"""
 from __future__ import annotations
+from .i18n import tr, N_
 import json
 import logging
 import os
@@ -47,9 +48,9 @@ class LaunchPlan:
     def ok(self) -> bool:
         return not self.error_code
 
-    def fail(self, code, msg, step="検証"):
+    def fail(self, code, msg, step=None):
         self.error_code, self.error = code, msg
-        self.steps.append(Step(step, "fail", msg))
+        self.steps.append(Step(step or tr("検証"), "fail", msg))
         log.error("launch_prepare_failed code=%s msg=%s", code, msg)
         return self
 
@@ -67,7 +68,7 @@ class LaunchResult:
 
 def _open_uri(uri: str):
     if os.name != "nt":
-        raise OSError("Windows以外ではRobloxを起動できません")
+        raise OSError(tr("Windows以外ではRobloxを起動できません"))
     os.startfile(uri)  # type: ignore[attr-defined]  # 登録済みのroblox://ハンドラへ委譲
 
 
@@ -97,7 +98,7 @@ class Launcher:
             d = json.loads(target.read_text("utf-8"))
             return d if isinstance(d, dict) else {}
         except (OSError, ValueError):
-            plan.note = "既存のClientAppSettings.jsonが読めません（バックアップ後に置き換えます）"
+            plan.note = tr("既存のClientAppSettings.jsonが読めません（バックアップ後に置き換えます）")
             return {}
 
     def prepare(self, game: Game | None, mode: str, preset_id: str | None = None) -> LaunchPlan:
@@ -105,51 +106,51 @@ class Launcher:
         plan = LaunchPlan(mode=mode, game=game)
         log.info("launch_prepare mode=%s game=%s", mode, game.place_id if game else None)
         if mode not in MODES:
-            return plan.fail("BAD_MODE", f"不明な起動モード: {mode}")
+            return plan.fail("BAD_MODE", tr("不明な起動モード: {0}", mode))
         if mode in ("apply_and_play", "play_only"):
             if game is None:
-                return plan.fail("INVALID_PLACE", "ゲームが選択されていません")
+                return plan.fail("INVALID_PLACE", tr("ゲームが選択されていません"))
             try:
                 pid = validate_place_id(game.place_id)
                 plan.uri = build_launch_uri(pid)
                 if uri_place_id(plan.uri) != pid:
-                    raise InvalidPlace("URIへのPlace ID埋め込み検証に失敗")
+                    raise InvalidPlace(tr("URIへのPlace ID埋め込み検証に失敗"))
             except InvalidPlace as e:
                 return plan.fail("INVALID_PLACE", str(e))
-            plan.steps.append(Step("Place IDの検証", "ok", f"placeId={pid}"))
+            plan.steps.append(Step(tr("Place IDの検証"), "ok", f"placeId={pid}"))
         det = c.detect_outcome()
         if det.install is None:
             plan.candidates = det.candidates
-            return plan.fail(det.code, det.message, "Roblox環境の検出")
+            return plan.fail(det.code, det.message, tr("Roblox環境の検出"))
         plan.install = det.install
-        plan.steps.append(Step("Roblox環境の検出", "ok", f"{det.install.version_name}（{det.install.verified_by}）"))
+        plan.steps.append(Step(tr("Roblox環境の検出"), "ok", tr("{0}（{1}）", det.install.version_name, det.install.verified_by)))
         wants_apply = mode == "apply_only" or (mode == "apply_and_play" and game is not None and game.apply_flags)
         if not wants_apply:
-            plan.steps.append(Step("FastFlag適用", "skip", "適用せずに起動します"))
+            plan.steps.append(Step(tr("FastFlag適用"), "skip", tr("適用せずに起動します")))
             return plan
         pid_ = preset_id if preset_id is not None else ((game.preset_id if game else "") or c.settings.data.active_preset)
         plan.preset_id = pid_
         if not pid_:
             if mode == "apply_only":
-                return plan.fail("NO_PRESET", "適用するプリセットが選択されていません")
-            plan.steps.append(Step("FastFlag適用", "skip", "プリセット未選択のため適用しません"))
+                return plan.fail("NO_PRESET", tr("適用するプリセットが選択されていません"))
+            plan.steps.append(Step(tr("FastFlag適用"), "skip", tr("プリセット未選択のため適用しません")))
             return plan
         try:
             plan.flags = c.resolve_flags(pid_)
         except KeyError:
-            return plan.fail("PRESET_MISSING", "選択されたプリセットが見つかりません（削除された可能性）")
+            return plan.fail("PRESET_MISSING", tr("選択されたプリセットが見つかりません（削除された可能性）"))
         if not plan.flags:
             if mode == "apply_only":
-                return plan.fail("NOTHING_TO_APPLY", "適用対象の（有効な）フラグがありません")
-            plan.steps.append(Step("FastFlag適用", "skip", "選択された設定が空です"))
+                return plan.fail("NOTHING_TO_APPLY", tr("適用対象の（有効な）フラグがありません"))
+            plan.steps.append(Step(tr("FastFlag適用"), "skip", tr("選択された設定が空です")))
             return plan
         errs = validate_flags(plan.flags)
         if errs:
-            return plan.fail("INVALID_FLAGS", "\n".join(errs[:10]), "設定の検証")
-        plan.steps.append(Step("設定の検証", "ok", f"{len(plan.flags)}件"))
+            return plan.fail("INVALID_FLAGS", "\n".join(errs[:10]), tr("設定の検証"))
+        plan.steps.append(Step(tr("設定の検証"), "ok", tr("{0}件", len(plan.flags))))
         plan.unverified = [n for n in plan.flags if c.allowlist.status(n) != "allowed"]
         if plan.unverified:
-            plan.steps.append(Step("公式許可リスト", "warn", f"{len(plan.unverified)}件は公式掲載を確認できず、反映されない可能性があります"))
+            plan.steps.append(Step(tr("公式許可リスト"), "warn", tr("{0}件は公式掲載を確認できず、反映されない可能性があります", len(plan.unverified))))
         payload = to_roblox_payload(plan.flags, c.settings.data.value_format)
         plan.target = client_settings_path(plan.install)
         plan.diff = diff_payload(self._read_existing(plan.target, plan), payload)
@@ -164,56 +165,56 @@ class Launcher:
         do_apply = plan.apply_needed if apply is None else (apply and plan.apply_needed)
         det = c.detect_outcome()           # 起動直前に再確認（更新による場所の変化に追従）
         if det.install is None:
-            steps.append(Step("起動前の再検出", "fail", det.message))
+            steps.append(Step(tr("起動前の再検出"), "fail", det.message))
             return LaunchResult(False, det.code, det.message, steps)
         if plan.install and det.install.version_dir != plan.install.version_dir:
             log.info("roblox_version_changed_before_launch old=%s new=%s", plan.install.version_dir, det.install.version_dir)
-            steps.append(Step("起動前の再検出", "warn", f"環境が変わりました → {det.install.version_name}"))
+            steps.append(Step(tr("起動前の再検出"), "warn", tr("環境が変わりました → {0}", det.install.version_name)))
         else:
-            steps.append(Step("起動前の再検出", "ok", det.install.version_name))
+            steps.append(Step(tr("起動前の再検出"), "ok", det.install.version_name))
         plan.install = det.install
         applied = False
-        ar_msg = "適用しませんでした"
+        ar_msg = tr("適用しませんでした")
         if do_apply:
             ar = apply_flags(c.backups, plan.install, plan.flags, c.settings.data.value_format)
             c.record_apply(ar, plan)
             if not ar.ok:
-                steps.append(Step("FastFlagの適用", "fail", ar.message))
+                steps.append(Step(tr("FastFlagの適用"), "fail", ar.message))
                 return LaunchResult(False, "APPLY_FAILED", ar.message, steps)
             applied = True
             ar_msg = ar.message
-            steps.append(Step("バックアップ", "ok", "適用前に既存設定を退避しました" if ar.backup_id else "既存設定なし（新規作成）"))
-            steps.append(Step("FastFlagの適用", "warn" if plan.unverified else "ok",
-                              ar.message + (f"／未確認フラグ{len(plan.unverified)}件" if plan.unverified else "")))
+            steps.append(Step(tr("バックアップ"), "ok", tr("適用前に既存設定を退避しました") if ar.backup_id else tr("既存設定なし（新規作成）")))
+            steps.append(Step(tr("FastFlagの適用"), "warn" if plan.unverified else "ok",
+                              ar.message + (tr("／未確認フラグ{0}件", len(plan.unverified)) if plan.unverified else "")))
             c.maybe_prune_backups()
         else:
-            steps.append(Step("FastFlagの適用", "skip", "実行しません"))
+            steps.append(Step(tr("FastFlagの適用"), "skip", tr("実行しません")))
         if plan.mode == "apply_only":
             return LaunchResult(True, "APPLIED", ar_msg, steps, applied=applied)
         if not self.net_check():
-            steps.append(Step("ネットワーク確認", "warn", "www.roblox.com に接続できません。オフライン/障害の場合、ゲームへ参加できません"))
+            steps.append(Step(tr("ネットワーク確認"), "warn", tr("www.roblox.com に接続できません。オフライン/障害の場合、ゲームへ参加できません")))
         was_running = self.process_running()
         try:
             if plan.mode == "roblox_only":
                 if plan.install.launcher_exe is None:
-                    raise OSError("RobloxPlayerLauncher.exe が見つかりません")
+                    raise OSError(tr("RobloxPlayerLauncher.exe が見つかりません"))
                 self.open_exe(plan.install.launcher_exe)
-                what = "Roblox本体の起動要求"
+                what = tr("Roblox本体の起動要求")
             else:
                 if plan.game is None or uri_place_id(plan.uri) != plan.game.place_id:
-                    raise InvalidPlace("起動URIのPlace IDがゲーム設定と一致しません")
+                    raise InvalidPlace(tr("起動URIのPlace IDがゲーム設定と一致しません"))
                 self.open_uri(plan.uri)
-                what = f"ゲーム起動要求 (placeId={plan.game.place_id})"
+                what = tr("ゲーム起動要求 (placeId={0})", plan.game.place_id)
         except InvalidPlace as e:
-            steps.append(Step("起動要求の送信", "fail", str(e)))
+            steps.append(Step(tr("起動要求の送信"), "fail", str(e)))
             return LaunchResult(False, "INVALID_PLACE", str(e), steps, applied, uri=plan.uri)
         except Exception as e:
-            msg = f"起動要求を処理できませんでした（Robloxが未登録/URIハンドラ異常の可能性）: {e}"
+            msg = tr("起動要求を処理できませんでした（Robloxが未登録/URIハンドラ異常の可能性）: {0}", e)
             log.error("launch_failed %s", e)
-            steps.append(Step("起動要求の送信", "fail", msg))
+            steps.append(Step(tr("起動要求の送信"), "fail", msg))
             return LaunchResult(False, "URI_FAILED", msg, steps, applied, uri=plan.uri)
         log.info("launch_requested mode=%s place=%s", plan.mode, plan.game.place_id if plan.game else None)
-        steps.append(Step("起動要求の送信", "ok", what))
+        steps.append(Step(tr("起動要求の送信"), "ok", what))
         if plan.game:
             c.games.record_launch(plan.game.id)
             c.state.set("last_game", {"id": plan.game.id, "name": plan.game.name, "place_id": plan.game.place_id, "at": now_iso()})
@@ -225,9 +226,9 @@ class Launcher:
                     break
                 self.sleep(1)
         if seen:
-            steps.append(Step("Robloxプロセス確認", "ok", "起動前から実行中でした" if was_running else "プロセスを検出しました"))
+            steps.append(Step(tr("Robloxプロセス確認"), "ok", tr("起動前から実行中でした") if was_running else tr("プロセスを検出しました")))
         else:
-            steps.append(Step("Robloxプロセス確認", "warn", "プロセスを確認できません（起動中・ログイン待ち・更新中の可能性）"))
-        msg = ("起動要求を送信しました。" + ("Robloxのプロセスは検出しました。" if seen else "") +
-               "ゲームへ実際に接続できたかは、ランチャーからは確認できません。")
+            steps.append(Step(tr("Robloxプロセス確認"), "warn", tr("プロセスを確認できません（起動中・ログイン待ち・更新中の可能性）")))
+        msg = (tr("起動要求を送信しました。") + (tr("Robloxのプロセスは検出しました。") if seen else "") +
+               tr("ゲームへ実際に接続できたかは、ランチャーからは確認できません。"))
         return LaunchResult(True, "REQUEST_SENT", msg, steps, applied, seen, plan.uri)

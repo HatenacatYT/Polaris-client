@@ -1,27 +1,9 @@
-# Python
 __pycache__/
-*.py[cod]
-*$py.class
-.pytest_cache/
-.coverage
-htmlcov/
-
-# Environments
+*.pyc
 .venv/
 venv/
-env/
-
-# PyInstaller output
 build/
 dist/
-*.spec.bak
-
-# Editors / OS
-.vscode/
-.idea/
-.DS_Store
-Thumbs.db
-
-# Local logs and temporary output
+*.egg-info/
+.pytest_cache/
 *.log
-*.tmp
