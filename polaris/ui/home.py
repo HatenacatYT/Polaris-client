@@ -1,8 +1,9 @@
-"""ホーム画面: 背景＋右上の歯車＋下部中央（ゲーム名 → プレイ / FastFlags）。"""
+"""ホーム画面: 背景＋右上のナビゲーション＋ゲーム起動コントロール。"""
 from __future__ import annotations
 from ..core.i18n import tr, N_
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QBoxLayout, QMenu, QFrame, QGraphicsDropShadowEffect
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QBoxLayout, QMenu, QFrame,
+                               QGraphicsDropShadowEffect, QSizePolicy)
 from PySide6.QtGui import QColor
 
 from .background import BackgroundWidget
@@ -21,20 +22,25 @@ class HomePage(QWidget):
         self.content = QWidget(self); self.content.setAttribute(Qt.WA_TranslucentBackground)
         lay = QVBoxLayout(self.content); lay.setContentsMargins(28, 20, 28, 34); lay.setSpacing(10)
         top = QHBoxLayout(); top.addStretch()
-        self.gear = GearButton(); self.gear.setToolTip(tr("設定")); self.gear.setAccessibleName(tr("設定"))
-        self.gear.clicked.connect(lambda: win.goto("settings")); top.addWidget(self.gear)
+        self.gear = GearButton(); self.gear.setToolTip(tr("ナビゲーションを開く")); self.gear.setAccessibleName(tr("ナビゲーションを開く"))
+        self.gear.clicked.connect(win.toggle_navigation); top.addWidget(self.gear)
         lay.addLayout(top); lay.addStretch(1)
 
         self.game_btn = AnimButton("", "ghost"); self.game_btn.setMinimumHeight(52)
         f = self.game_btn.font(); f.setPointSize(18); f.setBold(True); self.game_btn.setFont(f)
         self.game_btn.setToolTip(tr("クリックしてゲームを切り替え")); self.game_btn.clicked.connect(self._menu)
         self.info = QLabel(""); self.info.setObjectName("muted"); self.info.setAlignment(Qt.AlignCenter); self.info.setWordWrap(True)
-        self.play = AnimButton(tr("▶ プレイ"), "primary"); self.play.setMinimumSize(320, 72)
+        self.sky = AnimButton(tr("☼ Custom Sky"), "secondary"); self.sky.setMinimumSize(150, 72)
+        self.sky.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.sky.setToolTip(tr("カスタムスカイを設定")); self.sky.clicked.connect(lambda: win.goto("custom_sky"))
+        self.play = AnimButton(tr("▶ プレイ"), "primary"); self.play.setMinimumSize(230, 72)
+        self.play.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         f = self.play.font(); f.setPointSize(16); f.setBold(True); self.play.setFont(f); self.play.clicked.connect(self._play)
-        self.ff = AnimButton("FastFlags", "secondary"); self.ff.setMinimumSize(180, 72)
+        self.ff = AnimButton("FastFlags", "secondary"); self.ff.setMinimumSize(150, 72)
+        self.ff.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.ff.setToolTip(tr("FastFlags設定を開く")); self.ff.clicked.connect(lambda: win.goto("flags"))
         self.btn_row = QBoxLayout(QBoxLayout.LeftToRight); self.btn_row.setSpacing(14)
-        self.btn_row.addStretch(); self.btn_row.addWidget(self.play); self.btn_row.addWidget(self.ff); self.btn_row.addStretch()
+        self.btn_row.addWidget(self.sky, 2); self.btn_row.addWidget(self.play, 3); self.btn_row.addWidget(self.ff, 2)
         self.status = QLabel(""); self.status.setAlignment(Qt.AlignCenter); self.status.setWordWrap(True)
         self.status.setObjectName("muted")
         self.gcard = QFrame(); self.gcard.setObjectName("homeCard")
@@ -64,8 +70,8 @@ class HomePage(QWidget):
         super().resizeEvent(e)
         self.bg.setGeometry(self.rect()); self.content.setGeometry(self.rect())
         # 狭い幅ではボタンを縦に並べ、重ならないようにする
-        self.btn_row.setDirection(QBoxLayout.TopToBottom if self.width() < 560 else QBoxLayout.LeftToRight)
-        self.play.setMinimumWidth(240 if self.width() < 560 else 320)
+        self.btn_row.setDirection(QBoxLayout.TopToBottom if self.width() < 720 else QBoxLayout.LeftToRight)
+        self.play.setMinimumWidth(230)
 
     # ---- ゲーム選択・起動 ----
     def _menu(self):

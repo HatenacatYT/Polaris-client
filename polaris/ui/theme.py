@@ -50,7 +50,8 @@ QMainWindow, QDialog, QMessageBox {{ background:{BG}; }}
 #content {{ background:{BG}; }}
 #root {{ background:{BG}; border:1px solid {BORDER}; }}
 #titlebar {{ background:{PANEL}; border-bottom:1px solid {BORDER}; }}
-#sidebar {{ background:{PANEL}; border-right:1px solid {BORDER}; }}
+#navDrawer {{ background:{PANEL}; border-left:1px solid {BORDER}; }}
+#navScrim {{ background:rgba(16, 25, 43, 125); border:0; border-radius:0; padding:0; min-height:0; }}
 #card {{ background:{PANEL}; border:1px solid {BORDER}; border-radius:20px; }}
 #homeCard {{ background:rgba(255,255,255,0.88); border:1px solid {BORDER}; border-radius:28px; }}
 #presetCard {{ background:{PANEL}; border:1px solid {BORDER}; border-radius:20px; }}

@@ -99,7 +99,9 @@ def test_rapid_page_switching(app, win, anim):
 
 def test_home_buttons_navigate_and_play(app, win, monkeypatch):
     home = win.pages["home"]
-    home.gear.click(); assert win.current == "settings"
+    home.gear.click(); assert win.navigation._opened and win.current == "home"
+    win.nav["settings"].click(); assert win.current == "settings" and not win.navigation._opened
+    win.goto("home"); home.sky.click(); assert win.current == "custom_sky"
     win.goto("home"); home.ff.click(); assert win.current == "flags"
     win.goto("home")
     monkeypatch.setattr("polaris.ui.home.QMenu.exec", lambda *a, **k: None)
@@ -112,6 +114,25 @@ def test_home_buttons_navigate_and_play(app, win, monkeypatch):
     assert wait(app, lambda: win.calls == ["roblox://experiences/start?placeId=123"])
     assert wait(app, lambda: not win.launch.busy and not home.play._busy)
     assert win.core.games.get(g.id).launch_count == 1 and "確認できません" in win.pages["status"].out.toPlainText()
+
+
+def test_navigation_drawer_outside_click_escape_and_responsive_home(app, win):
+    home = win.pages["home"]
+    home.gear.click()
+    assert win.navigation.isVisible() and win.navigation._opened
+    win.navigation.scrim.click()
+    assert wait(app, lambda: not win.navigation.isVisible())
+
+    home.gear.click()
+    assert win.navigation._opened
+    win.escape_shortcut.activated.emit()
+    assert wait(app, lambda: not win.navigation.isVisible())
+
+    home.resize(600, 500); app.processEvents()
+    assert home.btn_row.direction().name == "TopToBottom"
+    home.resize(820, 600); app.processEvents()
+    assert home.btn_row.direction().name == "LeftToRight"
+    assert home.sky.minimumHeight() == home.play.minimumHeight() == home.ff.minimumHeight()
 
 
 def test_play_without_game_guides_user(app, win):

@@ -191,15 +191,20 @@ class ToastManager:
         if t not in self.items:
             return
         self.items.remove(t)
-        if immediate or not ANIM["on"]:
-            t.hide(); t.deleteLater()
-        else:
-            if t._in is not None:
-                t._in.stop()
-            eff = t.graphicsEffect() or QGraphicsOpacityEffect(t)
-            t.setGraphicsEffect(eff)
-            a = QPropertyAnimation(eff, b"opacity", t); a.setDuration(DUR["normal"])
-            a.setStartValue(eff.opacity()); a.setEndValue(0.0); a.finished.connect(t.deleteLater); a.start()
+        try:
+            if immediate or not ANIM["on"]:
+                t.hide(); t.deleteLater()
+            else:
+                if t._in is not None:
+                    t._in.stop()
+                eff = t.graphicsEffect() or QGraphicsOpacityEffect(t)
+                t.setGraphicsEffect(eff)
+                a = QPropertyAnimation(eff, b"opacity", t); a.setDuration(DUR["normal"])
+                a.setStartValue(eff.opacity()); a.setEndValue(0.0); a.finished.connect(t.deleteLater); a.start()
+        except RuntimeError:
+            # A parent window may be destroyed before the toast's single-shot
+            # timer fires. The stale Python wrapper must not break the event loop.
+            return
         self.reflow()
 
     def reflow(self):
@@ -240,23 +245,6 @@ class SlideStack(QStackedWidget):
         fa = QPropertyAnimation(eff, b"opacity", w); fa.setDuration(DUR["normal"]); fa.setStartValue(0.0); fa.setEndValue(1.0)
         g = QParallelAnimationGroup(self); g.addAnimation(pa); g.addAnimation(fa)
         g.finished.connect(self._cleanup); self._group = g; g.start()
-
-
-class Sidebar(QFrame):
-    EXPANDED, COLLAPSED = 220, 68
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setObjectName("sidebar"); self._w = self.EXPANDED; self.setFixedWidth(self._w)
-        self._anim = QPropertyAnimation(self, b"sbWidth", self); self._anim.setDuration(DUR["normal"])
-        self._anim.setEasingCurve(QEasingCurve.InOutCubic)
-
-    def _g(self): return self._w
-    def _s(self, v): self._w = int(v); self.setFixedWidth(self._w)
-    sbWidth = Property(int, _g, _s)
-
-    def set_collapsed(self, collapsed: bool):
-        _go(self._anim, self._w, self.COLLAPSED if collapsed else self.EXPANDED)
 
 
 class FadeMixin:

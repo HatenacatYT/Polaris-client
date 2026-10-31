@@ -35,8 +35,29 @@ class AppSettings:
     bg_particles: int = 60
     bg_speed: int = 50
     selected_game_id: str = ""
+    custom_sky_name: str = ""
+    custom_sky_source: str = ""
+    custom_sky_source_mode: str = ""
+    custom_sky_files: dict = None
+    custom_sky_face_targets: dict = None
+    custom_sky_applied: bool = False
+    custom_sky_backup_id: str = ""
+    custom_sky_restore_backup_id: str = ""
+    custom_sky_applied_at: str = ""
+    custom_sky_applied_version_dir: str = ""
+    custom_sky_applied_targets: dict = None
     win_w: int = 1200
     win_h: int = 780
+
+    def __post_init__(self):
+        # Avoid shared mutable defaults while retaining compatibility with old
+        # settings files, which simply omit these new v1.0.2 fields.
+        if self.custom_sky_files is None:
+            self.custom_sky_files = {}
+        if self.custom_sky_face_targets is None:
+            self.custom_sky_face_targets = {}
+        if self.custom_sky_applied_targets is None:
+            self.custom_sky_applied_targets = {}
 
 
 class SettingsStore:
@@ -58,6 +79,15 @@ class SettingsStore:
         if s.accent not in ACCENTS: s.accent = "cyan"
         if not re.fullmatch(r"#[0-9a-fA-F]{6}", s.custom_color): s.custom_color = "#27a9ff"
         if s.bg_mode not in ("animated", "video"): s.bg_mode = "animated"
+        if not isinstance(s.custom_sky_files, dict): s.custom_sky_files = {}
+        if not isinstance(s.custom_sky_face_targets, dict): s.custom_sky_face_targets = {}
+        if not isinstance(s.custom_sky_applied_targets, dict): s.custom_sky_applied_targets = {}
+        s.custom_sky_files = {str(k): str(v) for k, v in s.custom_sky_files.items()
+                              if isinstance(k, str) and isinstance(v, str)}
+        s.custom_sky_face_targets = {str(k): str(v) for k, v in s.custom_sky_face_targets.items()
+                                     if isinstance(k, str) and isinstance(v, str)}
+        s.custom_sky_applied_targets = {str(k): str(v) for k, v in s.custom_sky_applied_targets.items()
+                                        if isinstance(k, str) and isinstance(v, str)}
         s.bg_overlay = max(0, min(90, s.bg_overlay)); s.bg_particles = max(10, min(150, s.bg_particles))
         s.bg_speed = max(10, min(200, s.bg_speed))
         s.win_w = max(900, min(6000, s.win_w)); s.win_h = max(600, min(4000, s.win_h))
